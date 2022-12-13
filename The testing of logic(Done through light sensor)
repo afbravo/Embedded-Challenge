@@ -1,0 +1,95 @@
+#include <Arduino.h>
+//I am using the light sensor to describe the logic 
+
+//The time breathing and time not breathing
+double bt=0;
+double nbt=0;
+//This can be later replaced by pressure
+int Pressure=0;
+
+boolean isbreathing=true;
+boolean previous_state=true;
+
+short * ptrADCData = (short*)0x78;
+
+void setup() {  
+  // put your setup code here, to run once:
+
+  TCCR1A=0b00100011;
+  //00 for OCR1A at TOP, disconnected
+    //10 for OCR1B output overriding
+      //00 Don't care about the output of COM C
+        //11 for WGM bit 1,0 of Fast PWM mode
+  TCCR1B=0b00011100;
+  //000 for don't care
+    //11 for WGM bit 3, 2 of Fast PWM mode
+      //100 is for prescaling of 256
+  OCR1A=124;
+  OCR1B=62;
+
+  ADMUX=0b01000000;
+  //01 Use Vcc as reference
+    //0 Right Justify
+      //00000 use the Light sensor
+  
+  ADCSRA=0b10100100;
+  //1 Turn on ADC hardware
+    //0 ADSC bit, don't start yet
+      //1 Auto Trigger Enable
+        //00 Interrupt Stuff
+          //100-16 Clock prescaler
+
+  ADCSRB=0b00000101;
+  //0 for no high speed
+    //0 for Don't care
+      //0 for the other MUX bit
+        //0 for Don't care
+          //0101 Timer 1 Compare match on B 
+
+  ADCSRA |= (1<<ADSC);
+
+  TIMSK1=0b00000100;
+  //Only activate the Compare Match B
+
+  Serial.begin(9600);
+}
+
+ISR(TIMER1_COMPB_vect){ 
+  nbt=nbt+0.004;
+  bt=bt+0.004;
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  Pressure=*ptrADCData;
+  Serial.print("The pressure is:");
+  Serial.println(Pressure);
+  if(Pressure>100){
+    isbreathing=true;
+  }
+
+  else{
+    isbreathing=false;
+  }
+
+  if(isbreathing==previous_state and isbreathing==false){
+    if(nbt>10){
+      Serial.println("The patient has stopped breathing, very dangerous");
+    }
+  }
+
+  if(isbreathing==previous_state and isbreathing==true){
+    if(bt>1){
+      Serial.println("Breathing normally");
+    }
+
+  }
+
+  if(previous_state!=isbreathing){
+    nbt=0;
+    bt=0;
+  }
+
+  //Store the previous state for comparison
+  previous_state=isbreathing;
+}
